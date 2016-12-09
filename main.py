@@ -4,14 +4,14 @@ import requests
 import sys
 
 
-DAY = 4
+DAY = 8
 
 def main():
 
-    from day4 import part_one, part_two, test
+    from day8 import part_one, part_two
 
-    exercise = sys.argv[2]
-    first_run = sys.argv[3]
+    exercise = sys.argv[1]
+    first_run = sys.argv[2]
 
     cprint("Part %s for day %s" % (exercise, DAY), 'magenta')
 
@@ -25,9 +25,6 @@ def main():
         part_one(input_text)
     elif exercise == '2':
         part_two(input_text)
-    else:
-        test_input = ''
-        test(test_input)
 
     cprint("Process time: %s" % (time.time() - start), 'yellow')
 
@@ -36,7 +33,7 @@ def handle_input(first_run):
     if first_run == '1':
         r = requests.get(
             'http://adventofcode.com/2016/day/{day}/input'.format(day=DAY),
-            cookies=dict(session=sys.argv[4]))
+            cookies=dict(session=sys.argv[3]))
         print r.text
         input_text = r.text
         with open('input.txt', 'w') as input_file:
