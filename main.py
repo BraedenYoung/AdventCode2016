@@ -4,11 +4,12 @@ import requests
 import sys
 
 
-DAY = 8
+DAY = 18
+
 
 def main():
 
-    from day8 import part_one, part_two
+    from day18 import part_one, part_two
 
     exercise = sys.argv[1]
     first_run = sys.argv[2]
