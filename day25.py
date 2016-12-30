@@ -12,7 +12,7 @@ dec a
 dec a
 """
 
-REG = {'a': 12, 'b': 0, 'c': 0, 'd': 0}
+REG = {'a': 0, 'b': 0, 'c': 0, 'd': 0, 'out': [0]}
 
 INST = {
     'cpy': lambda x, y: set_register(y, x),
@@ -21,13 +21,18 @@ INST = {
     'jnz': lambda x, y: jump_to_line(x, y),
     'tgl': lambda prog, x: toggle(prog, x),
     'mul': lambda x, y, z: multiply(x, y, z),
+    'out': lambda x: transmit(x)
 }
 
 current_line = 0
 
+initialize = 151
 
+
+#  151< <220 !221 !164
 def part_one(input):
     cprint("Day 23: part one ", 'green')
+    global REG, current_line, initialize
 
     program = []
 
@@ -38,8 +43,15 @@ def part_one(input):
         line_decomp = line.split(' ')
         program.append(line_decomp)
 
-    run_program(program)
-    print REG
+
+    for initial in range(0, 1000):
+        try:
+            run_program(program)
+        except BadTransmission:
+            initialize += 1
+            REG = {'a': initialize, 'b': 0, 'c': 0, 'd': 0, 'out': []}
+            current_line = 0
+            continue
 
 
 def run_program(program):
@@ -79,10 +91,10 @@ def decrement_register(register):
 def jump_to_line(jump_check, jump_value):
     global current_line
 
-    try:
-        jump_check = int(jump_check)
-    except (AttributeError, ValueError):
+    if jump_check.isalpha():
         jump_check = int(REG[jump_check])
+    else:
+        jump_check = int(jump_check)
 
     if jump_check <= 0:
         current_line += 1
@@ -104,7 +116,6 @@ def toggle(program, index):
         return program
     instruction = list(program[offset])
 
-
     if len(instruction) == 2:
 
         if instruction[0] == "inc":
@@ -124,24 +135,36 @@ def toggle(program, index):
 
 
 def multiply(a, b, d):
-    REG[a] = REG[b] * REG[d]
+    if type(b) != int and not b.isdigit():
+        operand_1 = REG[b]
+    else:
+        operand_1 = int(b)
+    if type(d) != int and not d.isdigit():
+        operand_2 = REG[d]
+    else:
+        operand_1 = int(d)
+
+    REG[a] += operand_1 * operand_2
 
 
-def optimize_program(program):
+def transmit(x):
+    global current_line, initialize, REG
+    if x.isalpha():
+        x = int(REG[x])
+    else:
+        x = int(x)
 
-    for index, line in enumerate(program):
-        if index + 5 > len(program):
-            break
-        if line[0] != 'cpy':
-            continue
+    if REG['out'] and x == REG['out'][-1]:
+       raise BadTransmission()
 
-        if program[index + 3][0] == 'jnz' and program[index + 5][0] == 'jnz':
-            program[index] = ['mul', 'a', 'b', 'd']
-            program[index + 1] = ['cpy', 'c', 0]
-            program[index + 2] = ['cpy', 'd', 0]
-            for i in range(3, 6):
-                program[index + i] = ['jnz', 0, 0]
-    return program
+    REG['out'].append(x)
+
+
+    cprint('%s : %s' % (initialize, REG['out']), 'red')
+
+
+class BadTransmission(Exception):
+    pass
 
 
 def part_two(input):
@@ -156,7 +179,3 @@ def part_two(input):
         line_decomp = line.split(' ')
         program.append(line_decomp)
 
-    program = optimize_program(program)
-
-    run_program(program)
-    print REG
