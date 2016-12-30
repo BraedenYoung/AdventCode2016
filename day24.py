@@ -1,153 +1,208 @@
+import heapq
+from itertools import permutations
 
-from itertools import product
-
+import sys
 from termcolor import cprint
 
 
 SAMPLE = """
-Filesystem            Size  Used  Avail  Use%
-/dev/grid/node-x0-y0   10T    8T     2T   80%
-/dev/grid/node-x0-y1   11T    6T     5T   54%
-/dev/grid/node-x0-y2   32T   28T     4T   87%
-/dev/grid/node-x1-y0    9T    7T     2T   77%
-/dev/grid/node-x1-y1    8T    0T     8T    0%
-/dev/grid/node-x1-y2   11T    7T     4T   63%
-/dev/grid/node-x2-y0   10T    6T     4T   60%
-/dev/grid/node-x2-y1    9T    8T     1T   88%
-/dev/grid/node-x2-y2    9T    6T     3T   66%
+###########
+#0.1.....2#
+#.#######.#
+#4.......3#
+###########
 """
+
+WALL = '#'
+EMPTY = '.'
+ROBOT = '@'
+
+wires = []
 
 
 def part_one(input):
     cprint("Day 22: part one ", 'green')
 
-    nodes = []
+    global wires
+
+    vent_map = []
+    curr_pos = (0, 0)
+
+    row = 0
     for line in input.splitlines():
         if not line:
             continue
 
-        if line[0] != '/':
-            continue
+        col = 0
+        vent_row = []
 
-        line_decomp = line.lstrip().split(' ')
+        for col, char in enumerate(line):
+            if char == WALL:
+                vent_row.append(WALL)
+            elif char == EMPTY:
+                vent_row.append(EMPTY)
+            elif char.isdigit():
+                if char == '0':
+                    curr_pos = (row, col)
+                    vent_row.append(ROBOT)
+                    continue
+                vent_row.append(char)
+                wires.append((row, col))
 
-        node = tuple(map(lambda val: int(val[1:]),
-                         line_decomp.pop(0).split('-')[1:]))
-        sizes = []
-        for val in line_decomp:
-            if val == '':
+        vent_map.append(vent_row)
+        row += 1
+
+    print_map(vent_map)
+
+    shortest = sys.maxint
+    trip_costs = {}
+
+    possible_trips = permutations(wires+[curr_pos])
+
+    for trip_perm in possible_trips:
+
+        start = curr_pos
+
+        steps_in_perm = 0
+        for goal in list(trip_perm):
+            if goal == start:
                 continue
-            sizes.append(val)
+            steps = trip_costs.get((start, goal))
+            if not steps:
+                    costs = find_path(vent_map, start, goal)
+                    steps = costs[goal]
+                    trip_costs[(start, goal)] = steps
+                    trip_costs[(goal, start)] = steps
+            steps_in_perm += steps
+            start = goal
 
-        size, used, free, use = map(lambda val: int(val[:-1]), sizes)
-        nodes.append((node, (size, used, free, use)))
+        shortest = min(shortest, steps_in_perm)
 
-    print get_viable(nodes)
-
-
-def get_viable(nodes):
-    count = 0
-    for comb in product(nodes, repeat=2):
-        if comb[0] == comb[1] or comb[0][1][1] == 0:
-            continue
-
-        if comb[0][1][1] <= comb[1][1][2]:
-            count += 1
-
-    return count
+    print shortest
 
 
-TOO_LARGE = ('##', '##', '##', '##')
-count = 0
+def find_path(vent_map, curr_pos, curr_goal):
+    global wires
+
+    heap = []
+
+    heapq.heappush(heap, (0, (curr_pos, 0)))
+    costs = {curr_pos: None}
+
+    while heap:
+        new_cost, args = heapq.heappop(heap)
+        curr_pos, cost = args
+        if curr_pos == curr_goal:
+            break
+
+        new_cost = cost + 1
+        for next in get_neighbours(vent_map, curr_pos):
+            cost_so_far = costs.get(next)
+
+            if cost_so_far is None or new_cost < cost_so_far:
+                costs[next] = new_cost
+                priority = new_cost + heuristic(next, curr_goal)
+
+                heapq.heappush(heap, (priority, (tuple(next), new_cost)))
+
+    if not costs[curr_goal]:
+        costs[curr_goal] = sys.maxint
+
+    return costs
+
+
+def heuristic(a, b):
+    x1, y1 = a
+    x2, y2 = b
+    return abs(x1 - x2) + abs(y1 - y2)
+
+
+def get_neighbours(vent_map, pos):
+
+    paths = []
+    if pos[0] > 0 and vent_map[pos[0]-1][pos[1]] != WALL:
+        paths.append((pos[0]-1, pos[1])) # UP
+    if pos[0] < len(vent_map) and vent_map[pos[0]+1][pos[1]] != WALL:
+        paths.append((pos[0]+1, pos[1])) # DOWN
+    if pos[1] > 0 and vent_map[pos[0]][pos[1]-1] != WALL:
+        paths.append((pos[0], pos[1]-1)) # LEFT
+    if pos[1] < len(vent_map[pos[0]]) and vent_map[pos[0]][pos[1]+1] != WALL:
+        paths.append((pos[0], pos[1]+1)) # Right
+
+    return paths
+
+
+def print_map(map):
+    for row in map:
+        for col in row:
+            if col == EMPTY:
+                cprint(col, 'white', end=''),
+            elif col == ROBOT:
+                cprint(col, 'green', end='')
+            elif col.isdigit():
+                cprint(col, 'magenta', end='')
+            elif col == WALL:
+                cprint(col, 'red', end='')
+
+        print
 
 
 def part_two(input):
     cprint("Day 22: part two ", 'green')
 
-    nodes = {}
-    highest_x = 0
-    empty_pos = (0, 0)
+    global wires
 
+    row = 0
     for line in input.splitlines():
         if not line:
             continue
 
-        if line[0] != '/':
-            continue
+        col = 0
+        vent_row = []
 
-        line_decomp = line.lstrip().split(' ')
+        for col, char in enumerate(line):
+            if char == WALL:
+                vent_row.append(WALL)
+            elif char == EMPTY:
+                vent_row.append(EMPTY)
+            elif char.isdigit():
+                if char == '0':
+                    curr_pos = (row, col)
+                    vent_row.append(ROBOT)
+                    continue
+                vent_row.append(char)
+                wires.append((row, col))
 
-        node = tuple(map(lambda val: int(val[1:]),
-                         line_decomp.pop(0).split('-')[1:]))
-        sizes = []
-        for val in line_decomp:
-            if val == '':
+        vent_map.append(vent_row)
+        row += 1
+
+    print_map(vent_map)
+
+    shortest = sys.maxint
+    trip_costs = {}
+
+    possible_trips = permutations(wires+[curr_pos])
+
+    for trip_perm in possible_trips:
+        start = curr_pos
+        steps_in_perm = 0
+        for goal in list(trip_perm):
+            if goal == start:
                 continue
-            sizes.append(val)
+            steps = trip_costs.get((start, goal))
+            if not steps:
+                    costs = find_path(vent_map, start, goal)
+                    steps = costs[goal]
+                    trip_costs[(start, goal)] = steps
+                    trip_costs[(goal, start)] = steps
+            steps_in_perm += steps
+            start = goal
 
-        size, used, free, use = map(lambda val: int(val[:-1]), sizes)
+        steps = trip_costs.get((goal, curr_pos))
+        if not steps:
+            costs = find_path(vent_map, goal, curr_pos)
+            steps = costs[goal]
+        steps_in_perm += steps
+        shortest = min(shortest, steps_in_perm)
 
-        if used == 0:
-            empty_pos = node
-
-        args = (size, used, free, use)
-        if size > 100 and (size - used) < 100:
-            args = TOO_LARGE
-
-        nodes[node] = args
-
-        if node[0] > highest_x:
-            highest_x = node[0]
-
-    bring_empty_to_top(nodes, empty_pos, highest_x)
-
-    global count
-    print count + 1 + 5 * (highest_x -1)
-
-
-def bring_empty_to_top(nodes, empty, highest):
-    while True:
-        if empty[1] == 0:
-            break
-
-        new_empty = None
-        if nodes[(empty[0], empty[1]-1)] == TOO_LARGE:
-            while empty != (empty[0], empty[1]-1):
-                new_empty = (empty[0]-1, empty[1])
-                nodes = move_drive(nodes, empty, new_empty)
-                empty = new_empty
-                if nodes[(empty[0], empty[1]-1)] != TOO_LARGE:
-                    break
-        else:
-            new_empty = (empty[0], empty[1]-1)
-            nodes = move_drive(nodes, empty, new_empty)
-
-        empty = new_empty
-
-    while True:
-        if empty == (highest-1, 0):
-            break
-        new_empty = (empty[0]+1, empty[1])
-        nodes = move_drive(nodes, empty, new_empty)
-        empty = new_empty
-
-    return nodes, empty
-
-
-def move_drive(nodes, first, second):
-    global count
-    count += 1
-    nodes[first], nodes[second] = nodes[second], nodes[first]
-    return nodes
-
-
-def print_nodes(nodes, highest):
-    for y in range(highest+1):
-        for x in range(highest+1):
-            try:
-                print '| (%s / %s) ' % (nodes[(x, y)][1] or
-                                        '_', nodes[(x, y)][0]),
-            except KeyError:
-                break
-
-        print ''
+    print shortest
