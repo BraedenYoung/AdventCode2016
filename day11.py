@@ -1,7 +1,9 @@
-import copy
+import re
+import heapq
 from collections import OrderedDict
 
 import itertools
+from itertools import combinations
 from termcolor import cprint
 
 
@@ -18,29 +20,35 @@ ELEVATOR = 'E'
 
 possible_solutions = []
 
+devices = OrderedDict([
+    ('hydrogen generator', 'HG'),
+    ('hydrogen-compatible microchip', 'HM'),
+    ('lithium generator', 'LG'),
+    ('lithium-compatible microchip', 'LM'),
+    ('plutonium generator', 'PG'),
+    ('plutonium-compatible microchip', 'PM'),
+    ('promethium generator', 'PrG'),
+    ('promethium-compatible microchip', 'PrM'),
+    ('ruthenium generator', 'RG'),
+    ('ruthenium-compatible microchip', 'RM'),
+    ('strontium generator', 'SG'),
+    ('strontium-compatible microchip', 'SM'),
+    ('thulium generator', 'TG'),
+    ('thulium-compatible microchip', 'TM'),
+    ('elerium generator', 'RG'),
+    ('elerium-compatible microchip', 'EM'),
+    ('dilithium generator', 'DG'),
+    ('dilithium-compatible microchip', 'DM')
+
+])
+
 
 def part_one(input):
     cprint("Day 11: part one ", 'green')
 
-    input = SAMPLE
+    global devices
 
     building = []
-    devices = OrderedDict([
-        ('hydrogen generator', 'HG'),
-        ('hydrogen-compatible microchip', 'HM'),
-        ('lithium generator', 'LG'),
-        ('lithium-compatible microchip', 'LM'),
-        ('plutonium generator', 'PG'),
-        ('plutonium-compatible microchip', 'PM'),
-        ('promethium generator', 'PrG'),
-        ('promethium-compatible microchip', 'PrM'),
-        ('ruthenium generator', 'RG'),
-        ('ruthenium-compatible microchip', 'RM'),
-        ('strontium generator', 'SG'),
-        ('strontium-compatible microchip', 'SM'),
-        ('thulium generator', 'TG'),
-        ('thulium-compatible microchip', 'TM'),
-    ])
 
     floor_count = 0
     for line in input.splitlines():
@@ -53,67 +61,84 @@ def part_one(input):
         floor.append(ELEVATOR) if floor_count == 1 else floor.append(EMPTY)
 
         for device in devices.keys():
-            if device in line:
+            if findPart(device)(line):
                 floor.append(devices[device])
             else:
                 floor.append(EMPTY)
 
         building.append(tuple(floor))
 
+    building = tuple(building)
+
     print_building(building)
 
-    evaluate(building, [])
-
-    if len(possible_solutions) == 0:
-        cprint('No Solutions Found', 'red')
-        return
-
-    print min(possible_solutions)
+    evaluate(building)
 
 
-def evaluate(building, current_trip, parts_on_elev=None, dest_floor=None):
-    if is_complete(building, current_trip):
-        return None
+def findPart(w):
+    return re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search
 
-    current_floor = get_current_floor(building)
 
-    if dest_floor == current_floor:
-        return
+def evaluate(building):
 
-    if dest_floor and parts_on_elev:
-        building, current_floor = use_elevator(building, current_floor,
-                                               dest_floor, *parts_on_elev)
+    heap = []
+    initial_cost = 0
 
-    parts_to_move = get_valid_parts(building, current_floor)
+    heapq.heappush(heap, (initial_cost, building))
+    cost_so_far = {building: initial_cost}
 
-    if building[current_floor] in current_trip:
-        return
+    while heap:
 
-    current_trip.append(tuple(building[current_floor]))
+        _, building = heapq.heappop(heap)
 
-    if not parts_to_move:
-        return None
+        if is_complete(building):
+            print cost_so_far[building]
+            print building
+            return
 
-    for parts in parts_to_move:
+        current_floor = get_current_floor(building)
+        parts_to_move = get_valid_parts(building, current_floor)
 
-        dest_floor = current_floor + 1
-        if dest_floor != current_floor and dest_floor <= 3:
-            evaluate(copy.deepcopy(building), list(current_trip), parts,
-                     dest_floor=dest_floor)
+        floors_to_consider = []
 
-        if should_move_down(building, current_floor):
+        for parts in parts_to_move:
 
-            dest_floor = current_floor - 1
-            if dest_floor != current_floor and dest_floor >= 0:
-                evaluate(copy.deepcopy(building), list(current_trip), parts,
-                         dest_floor=dest_floor)
+            upper_floor = current_floor + 1
+            if upper_floor <= 3:
+                new_building, _ = use_elevator(building,
+                                               upper_floor,
+                                               *parts)
+                if new_building:
+                    floors_to_consider.append(new_building)
+
+            if len(parts) == 1 and should_move_down(building, current_floor):
+                lower_floor = current_floor - 1
+                if lower_floor >= 0:
+                    new_building, _ = use_elevator(
+                        building,
+                        lower_floor,
+                        *parts)
+                    if new_building:
+                        floors_to_consider.append(new_building)
+
+        new_cost = cost_so_far[building] + 1
+        for building in floors_to_consider:
+            if building not in cost_so_far.keys():
+                cost_so_far[building] = new_cost
+                heapq.heappush(heap, (new_cost, building))
+
 
 def should_move_down(building, current_floor):
-    if current_floor > 1:
-        for i in range(1):
-            if not floor_empty(building[i]):
-                return False
+    if current_floor == 0:
+        return False
+    elif current_floor == 1:
+        if floor_empty(building[0]):
+            return False
+    elif current_floor == 2:
+        if floor_empty(building[0]) and floor_empty(building[1]):
+            return False
     return True
+
 
 def floor_empty(floor):
     for device in floor[2:]:
@@ -121,51 +146,20 @@ def floor_empty(floor):
             return False
     return True
 
-def load_elevator(part_1, part_2):
-    if not part_1 and part_2:
-        return False
-    else:
-        return True
-
 
 def get_valid_parts(building, current_floor):
-    parts = get_current_devices(building, current_floor)
 
-    valid_parts = []
-
-    for i, part in enumerate(parts):
-        valid = True
-        remaining_list = parts[:i]+parts[i+1:]
-
-        for part_comb in list(itertools.combinations(remaining_list, 2)):
-            if not compare_part(*part_comb):
-                valid = False
-
-        if valid:
-            valid_parts.append((part,))
-
-    if current_floor == 3:
-        return valid_parts
-
-    for part_comb in list(itertools.combinations(parts, 2)):
-        valid = True
-
-        temp = list(parts)
-        del temp[temp.index(part_comb[0])]
-        del temp[temp.index(part_comb[1])]
-
-        for part_comb_inner in list(itertools.combinations(temp, 2)):
-            if not compare_part(*part_comb_inner):
-                valid = False
-
-        if valid:
-            valid_parts.append(part_comb)
-
-    return valid_parts
+    devices = get_current_devices(building, current_floor)
+    return list(combinations(devices, 2)) + list(combinations(devices, 1))
 
 
-def use_elevator(building, current_floor, new_floor, first_part,
+def use_elevator(building, new_floor, first_part,
                  second_part=None):
+
+    if not first_part:
+        return None, None
+
+    current_floor = get_current_floor(building)
 
     remade_original_floor = list(building[current_floor])
     remade_new_floor = list(building[new_floor])
@@ -184,10 +178,38 @@ def use_elevator(building, current_floor, new_floor, first_part,
     remade_original_floor[1] = EMPTY
     remade_new_floor[1] = ELEVATOR
 
-    building[current_floor] = tuple(remade_original_floor)
-    building[new_floor] = tuple(remade_new_floor)
+    if (not floor_is_safe(remade_original_floor)):
+        return None, None
 
-    return building, new_floor
+    new_building = list(building)
+
+    new_building[current_floor] = tuple(remade_original_floor)
+    new_building[new_floor] = tuple(remade_new_floor)
+
+    return tuple(new_building), new_floor
+
+
+def floor_is_safe(floor):
+    generators = []
+    for part in floor[2:]:
+        if 'G' in part:
+            generators.append(part)
+
+    if len(generators) == 0:
+        return True
+
+    is_safe = True
+    for part in floor[2:]:
+        if 'M' in part:
+            element = part[0]
+            part_matched = False
+            for gen in generators:
+                if gen[0] == element:
+                    part_matched = True
+            if not part_matched:
+                return False
+
+    return True
 
 
 def compare_part(part_1, part_2):
@@ -212,14 +234,12 @@ def get_current_floor(building):
             return num
 
 
-def is_complete(building, current_trip):
-    for i in range(1, len(building)):
+def is_complete(building):
+    for i in range(0, len(building)-1):
         for j in range(2, len(building[i])):
             if building[i][j] != EMPTY:
                 return False
 
-    possible_solutions.append(current_trip)
-    print possible_solutions
     return True
 
 
@@ -230,6 +250,35 @@ def print_building(building):
 
 def part_two(input):
     cprint("Day 9: part two ", 'green')
+    global devices
 
+    building = []
+
+    floor_count = 0
     for line in input.splitlines():
         line = line.lstrip()
+
+        floor = []
+        floor_count += 1
+        floor.append('F%s' % floor_count)
+
+        if floor_count == 1:
+            line += (' An elerium generator. An elerium-compatible '
+                    'microchip. A dilithium generator. '
+                    'A dilithium-compatible microchip')
+
+        floor.append(ELEVATOR) if floor_count == 1 else floor.append(EMPTY)
+
+        for device in devices.keys():
+            if findPart(device)(line):
+                floor.append(devices[device])
+            else:
+                floor.append(EMPTY)
+
+        building.append(tuple(floor))
+
+    building = tuple(building)
+
+    print_building(building)
+
+    evaluate(building)
